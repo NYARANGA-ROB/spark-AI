@@ -1,0 +1,308 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isUserInChat(chatId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/chats/$(chatId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+    }
+
+    function isUsersSparkyChat(chatId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/sparkyChats/$(chatId)) &&
+        request.auth.uid == get(/databases/$(database)/documents/sparkyChats/$(chatId)).data.userId;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Dashboard data access
+    match /dashboard/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+
+    // Chat History rules - Fixed permissions and validation
+    match /chatHistory/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                   request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                   request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                   resource.data.userId == request.auth.uid;
+    }
+
+    // Tasks collection
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated() && 
+                 resource.data.userId == request.auth.uid;
+      allow write: if isAuthenticated() && 
+                  request.resource.data.userId == request.auth.uid;
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && 
+                 resource.data.userId == request.auth.uid;
+      allow write: if isAuthenticated() && 
+                  request.resource.data.userId == request.auth.uid;
+    }
+
+    // User profiles and settings
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // Chat History rules - Fixed permissions and validation
+    match /chatHistory/{messageId} {
+      // Allow read for authenticated users querying their own data
+      allow read: if isAuthenticated();
+      
+      // Allow create with proper validation
+      allow create: if isAuthenticated() && 
+                   request.resource.data.userId == request.auth.uid &&
+                   request.resource.data.keys().hasAll(['userId', 'text', 'sender', 'timestamp', 'isEducator']) &&
+                   request.resource.data.userId is string &&
+                   request.resource.data.text is string &&
+                   request.resource.data.sender in ['user', 'bot'] &&
+                   request.resource.data.isEducator is bool;
+      
+      // Allow update only for pinned status
+      allow update: if isAuthenticated() && 
+                   resource.data.userId == request.auth.uid &&
+                   request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinned']) &&
+                   request.resource.data.pinned is bool;
+      
+      // Allow delete for own messages
+      allow delete: if isAuthenticated() && 
+                   resource.data.userId == request.auth.uid;
+    }
+
+    // Question history rules
+    match /questionHistory/{docId} {
+      // Allow read if authenticated and querying own data
+      allow read: if isAuthenticated() && 
+                 (resource == null || resource.data.userId == request.auth.uid);
+      // Allow create if authenticated and creating own data
+      allow create: if isAuthenticated() && 
+                   request.resource.data.userId == request.auth.uid;
+      // Allow delete if authenticated and deleting own data
+      allow delete: if isAuthenticated() && 
+                   resource.data.userId == request.auth.uid;
+      // Questions are immutable once created
+      allow update: if false;
+    }
+
+    // Sparky Chat Messages rules
+    match /sparkyChatMessages/{messageId} {
+      // Allow read for authenticated users querying their own data
+      allow read: if isAuthenticated();
+      
+      // Allow create with proper validation
+      allow create: if isAuthenticated() && 
+                   request.resource.data.userId == request.auth.uid &&
+                   request.resource.data.keys().hasAll(['userId', 'text', 'sender', 'timestamp', 'isEducator']) &&
+                   request.resource.data.userId is string &&
+                   request.resource.data.text is string &&
+                   request.resource.data.sender in ['user', 'bot'] &&
+                   request.resource.data.isEducator is bool;
+      
+      // Allow update only for pinned status
+      allow update: if isAuthenticated() && 
+                   resource.data.userId == request.auth.uid &&
+                   request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinned']) &&
+                   request.resource.data.pinned is bool;
+      
+      // Allow delete for own messages
+      allow delete: if isAuthenticated() && 
+                   resource.data.userId == request.auth.uid;
+    }
+
+    // Sparky Chat rules
+    match /sparkyChats/{chatId} {
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Sparky Messages rules
+    match /sparkyMessages/{messageId} {
+      allow read: if isAuthenticated() && isUsersSparkyChat(resource.data.chatId);
+      allow create: if isAuthenticated() && isUsersSparkyChat(request.resource.data.chatId);
+      allow update: if isAuthenticated() && isUsersSparkyChat(resource.data.chatId);
+      allow delete: if isAuthenticated() && isUsersSparkyChat(resource.data.chatId);
+    }
+
+    // Keep open access for assignments (as requested)
+    match /assignments/{assignment} {
+      allow read, write: if true;
+    }
+
+    // Student-specific rules
+    match /students/{studentId} {
+      // Allow reading basic profile info for connection requests
+      allow read: if request.auth != null;
+      // But only allow full access to own document
+      allow write: if request.auth != null && request.auth.uid == studentId;
+    }
+
+    // Teacher-specific rules
+    match /teachers/{teacherId} {
+      // Allow reading basic profile info for connection requests
+      allow read: if request.auth != null;
+      // But only allow full access to own document
+      allow write: if request.auth != null && request.auth.uid == teacherId;
+    }
+
+    // Optional: Shared resources that both can access
+    match /resources/{resourceId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Or your custom logic for who can write
+    }
+
+    // Questions collection
+    match /questions/{questionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Chat messages
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && isUserInChat(resource.data.chatId);
+      allow create: if isAuthenticated() && isUserInChat(request.resource.data.chatId) && 
+                   request.auth.uid == request.resource.data.senderId;
+      allow update: if isAuthenticated() && isUserInChat(resource.data.chatId) &&
+                   (request.auth.uid == resource.data.senderId || 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']));
+      allow delete: if isAuthenticated() && isUserInChat(resource.data.chatId) && 
+                   request.auth.uid == resource.data.senderId;
+    }
+
+    // Chat rooms
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.participants;
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow delete: if isAuthenticated() && request.auth.uid in resource.data.participants;
+    }
+
+    // Connections collection rules
+    match /connections/{connectionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                    request.resource.data.senderId == request.auth.uid &&
+                    request.resource.data.status == 'pending';
+      allow update: if isAuthenticated() && 
+                    (resource.data.receiverId == request.auth.uid || 
+                     resource.data.senderId == request.auth.uid);
+      allow delete: if isAuthenticated() && 
+                    (resource.data.senderId == request.auth.uid || 
+                     resource.data.receiverId == request.auth.uid);
+    }
+
+    // Chat Sessions rules
+    match /chatSessions/{sessionId} {
+      allow read: if isAuthenticated() && 
+                 (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && 
+                   request.resource.data.userId == request.auth.uid &&
+                   request.resource.data.keys().hasAll(['id', 'title', 'messages', 'timestamp', 'userId']) &&
+                   request.resource.data.id is number &&
+                   request.resource.data.title is string &&
+                   request.resource.data.messages is list &&
+                   request.resource.data.timestamp is string &&
+                   request.resource.data.userId is string;
+      allow update: if isAuthenticated() && 
+                   resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                   resource.data.userId == request.auth.uid;
+    }
+
+    // Attendance collection rules
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isTeacher();
+      allow update: if isAuthenticated() && isTeacher() && resource.data.teacherId == request.auth.uid;
+      allow delete: if isAuthenticated() && isTeacher() && resource.data.teacherId == request.auth.uid;
+    }
+  }
+}
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/teachers/$(request.auth.uid));
+    }
+
+    function isStudent() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/students/$(request.auth.uid));
+    }
+
+    function isValidFileType(contentType) {
+      return contentType.matches('application/pdf') || 
+             contentType.matches('application/msword') ||
+             contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document') ||
+             contentType.matches('image/.*') ||
+             contentType.matches('application/zip') ||
+             contentType.matches('application/x-zip-compressed');
+    }
+
+    function isValidFileSize(size) {
+      return size < 50 * 1024 * 1024; // 50MB
+    }
+
+    // Profile pictures
+    match /profile-pictures/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Assignment files (uploaded by teachers)
+    match /assignments/{teacherId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isTeacher() && request.auth.uid == teacherId &&
+                  isValidFileSize(request.resource.size) &&
+                  isValidFileType(request.resource.contentType);
+      allow delete: if isTeacher() && request.auth.uid == teacherId;
+    }
+
+    // Submission files (uploaded by students)
+    match /submissions/{assignmentId}/{studentId}/{fileName} {
+      allow read: if isAuthenticated() && (
+        isTeacher() || // Teachers can read all submissions
+        request.auth.uid == studentId // Students can read their own submissions
+      );
+      allow write: if isAuthenticated() && 
+        isStudent() && // Must be a student
+        request.auth.uid == studentId && // Can only write to their own folder
+        isValidFileSize(request.resource.size) && // File size check
+        isValidFileType(request.resource.contentType); // File type check
+      allow delete: if false; // No one can delete submissions
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+  }
+} 
