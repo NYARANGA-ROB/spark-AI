@@ -13,7 +13,6 @@ Spark-IQ is a comprehensive educational platform that leverages artificial intel
 - **Resource Management**: Access and organize educational materials efficiently
 
 ### For Educators
-
 - **Intelligent Assignment Management**: Create and manage assignments with AI-assisted grading
 - **Automated Evaluation**: Save time with AI-powered assessment of student work
 - **Visual Content Analysis**: Evaluate artwork, diagrams, and visual assignments using AI vision
