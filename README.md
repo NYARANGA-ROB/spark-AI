@@ -1,7 +1,6 @@
 # Spark-IQ: AI-Powered Educational Platform
 
 Spark-IQ is a comprehensive educational platform that leverages artificial intelligence to enhance the learning experience for both students and educators. The platform provides intelligent assignment management, automated grading, personalized feedback, and real-time collaboration tools.
-
 ## 🚀 Key Features
 
 ### For Students
