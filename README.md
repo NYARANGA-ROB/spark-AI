@@ -188,7 +188,6 @@ For support and questions:
 - [ ] Advanced analytics and reporting
 - [ ] Collaborative assignment features
 - [ ] Real-time collaboration tools
-
 ---
 
 **Spark-IQ** - Empowering education through intelligent technology.
